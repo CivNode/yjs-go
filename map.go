@@ -1,17 +1,12 @@
 package yjs
 
 // MapEvent carries information about a change to a Map type.
+//
+// In v0.1.x the event carries only Origin. Per-key change details
+// (action, old value, new value) are planned for v0.2.
 type MapEvent struct {
-	// Keys is the set of keys that changed.
-	Keys   map[string]MapChange
+	// Origin is the transaction origin passed to Transact.
 	Origin interface{}
-}
-
-// MapChange describes a single key change.
-type MapChange struct {
-	Action string // "add", "update", "delete"
-	OldVal interface{}
-	NewVal interface{}
 }
 
 // Map is a CRDT key-value store. Values are arbitrary Go values encoded as

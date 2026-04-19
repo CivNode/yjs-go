@@ -1,18 +1,13 @@
 package yjs
 
 // TextEvent carries information about a change to a Text type.
+//
+// In v0.1.x the event carries only Origin. Detailed delta computation
+// (retain/insert/delete operations per the Yjs delta format) is planned
+// for v0.2 once the observer infrastructure matures.
 type TextEvent struct {
-	// Delta is a list of retain/insert/delete operations.
-	Delta []TextDelta
 	// Origin is the transaction origin passed to Transact.
 	Origin interface{}
-}
-
-// TextDelta represents one operation in a text diff.
-type TextDelta struct {
-	Retain *uint64
-	Insert *string
-	Delete *uint64
 }
 
 // Text is a CRDT text sequence. Internally it is a doubly-linked list of Items,
