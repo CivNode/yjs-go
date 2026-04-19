@@ -124,7 +124,72 @@ func TestXmlFragmentBasic(t *testing.T) {
 	}
 }
 
-// deleteSet.add / isDeleted — exercised via Text.Delete and update propagation.
+// TestIntegrateItem_SkipsAlreadyDeleted verifies that when a delete-set update
+// arrives before the insert it references, items integrated later are marked
+// deleted immediately. Without isDeleted wired into integrateItem, the item
+// reappears as live content.
+func TestIntegrateItem_SkipsAlreadyDeleted(t *testing.T) {
+	// A inserts "hello world" then deletes "hello " (chars 0..6).
+	// B receives ONLY the delete update first, then the insert update.
+	// After both updates, B must converge to "world" (not "hello world").
+	docA := yjs.NewDocWithClientID(20)
+	docB := yjs.NewDocWithClientID(21)
+	textA := docA.GetText("t")
+	textB := docB.GetText("t")
+
+	var insertUpdate, deleteUpdate []byte
+	step := 0
+	docA.OnUpdate(func(u []byte, _ interface{}) {
+		step++
+		if step == 1 {
+			insertUpdate = u
+		} else {
+			deleteUpdate = u
+		}
+	})
+
+	docA.Transact(func() { textA.Insert(0, "hello world") }, nil)
+	docA.Transact(func() { textA.Delete(0, 6) }, nil) // remove "hello "
+
+	if got := textA.String(); got != "world" {
+		t.Fatalf("docA should be 'world', got %q", got)
+	}
+
+	// B receives delete-set update first (out-of-order delivery).
+	if err := yjs.ApplyUpdate(docB, deleteUpdate, "remote"); err != nil {
+		t.Fatalf("ApplyUpdate delete: %v", err)
+	}
+	// B has no items yet; delete is buffered in the accumulated delete set.
+
+	// B receives the insert update. The inserted items must be marked deleted.
+	if err := yjs.ApplyUpdate(docB, insertUpdate, "remote"); err != nil {
+		t.Fatalf("ApplyUpdate insert: %v", err)
+	}
+
+	if got := textB.String(); got != "world" {
+		t.Errorf("convergence: want 'world' got %q (isDeleted not consulted during integration)", got)
+	}
+
+	// C: normal order insert-then-delete also converges.
+	docC := yjs.NewDocWithClientID(22)
+	textC := docC.GetText("t")
+	if err := yjs.ApplyUpdate(docC, insertUpdate, "remote"); err != nil {
+		t.Fatalf("ApplyUpdate insert (C): %v", err)
+	}
+	if err := yjs.ApplyUpdate(docC, deleteUpdate, "remote"); err != nil {
+		t.Fatalf("ApplyUpdate delete (C): %v", err)
+	}
+	if got := textC.String(); got != "world" {
+		t.Errorf("C (normal order) want 'world' got %q", got)
+	}
+
+	// B and C must agree.
+	if textB.String() != textC.String() {
+		t.Errorf("B and C diverge: B=%q C=%q", textB.String(), textC.String())
+	}
+}
+
+// deleteSet.add / isDeleted — exercised via TestIntegrateItem_SkipsAlreadyDeleted.
 func TestDeleteSetCoverage(t *testing.T) {
 	docA := yjs.NewDocWithClientID(10)
 	docB := yjs.NewDocWithClientID(11)
