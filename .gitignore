@@ -12,7 +12,7 @@
 /bin/
 
 # Coverage
-coverage.out
+*.out
 coverage.html
 
 # Dependency directories
