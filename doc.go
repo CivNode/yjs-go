@@ -230,6 +230,21 @@ func (tx *transaction) addDeletedItem(item *Item) {
 	}
 }
 
+// Snapshot returns an opaque byte slice encoding the full document state.
+// Pass the result to RestoreDoc to reconstruct a Doc with the same state.
+func (d *Doc) Snapshot() ([]byte, error) {
+	return EncodeStateAsUpdate(d, nil)
+}
+
+// RestoreDoc reconstructs a Doc from a snapshot produced by Doc.Snapshot.
+func RestoreDoc(snapshot []byte) (*Doc, error) {
+	d := NewDoc()
+	if err := ApplyUpdate(d, snapshot, nil); err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
 func (tx *transaction) fireObservers() {
 	if tx.changedTypes == nil {
 		return

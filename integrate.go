@@ -33,6 +33,17 @@ func integrateItem(d *Doc, item *Item) {
 		item.Parent = st
 	}
 
+	// If parent is still unresolved but we have a left-origin neighbor,
+	// inherit the parent from that neighbor. This covers Array/Text items
+	// after the first element, which encode their OriginLeft but omit the
+	// parent key in the wire format.
+	if item.Parent == nil && item.OriginLeft != nil {
+		leftNeighbor := d.store.getItem(*item.OriginLeft)
+		if leftNeighbor != nil && leftNeighbor.Parent != nil {
+			item.Parent = leftNeighbor.Parent
+		}
+	}
+
 	// Resolve parent.
 	parent, parentSub := resolveParent(d, item)
 	if parent == nil {
