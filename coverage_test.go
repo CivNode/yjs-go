@@ -189,7 +189,8 @@ func TestIntegrateItem_SkipsAlreadyDeleted(t *testing.T) {
 	}
 }
 
-// deleteSet.add / isDeleted — exercised via TestIntegrateItem_SkipsAlreadyDeleted.
+// deleteSet.add / isDeleted — exercised via TestIntegrateItem_SkipsAlreadyDeleted
+// (out-of-order delivery) and here via normal-order insert-then-delete propagation.
 func TestDeleteSetCoverage(t *testing.T) {
 	docA := yjs.NewDocWithClientID(10)
 	docB := yjs.NewDocWithClientID(11)
