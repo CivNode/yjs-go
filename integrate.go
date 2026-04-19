@@ -107,8 +107,9 @@ func lssIsBefore(d *Doc, item, other *Item) bool {
 	if itemOriginClock != otherOriginClock {
 		return itemOriginClock > otherOriginClock
 	}
-	// Same origin: tie-break by clientID (higher clientID wins = goes left).
-	return item.ID.Client > other.ID.Client
+	// Same origin: tie-break by ID (higher clientID wins = goes left;
+	// compareIDs provides a total order using client then clock).
+	return compareIDs(item.ID, other.ID) > 0
 }
 
 // itemAfter returns the first live item to the right of left (or the first
