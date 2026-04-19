@@ -26,13 +26,16 @@ type Doc struct {
 }
 
 // NewDoc creates a new document with a random clientID.
+//
+// ClientIDs are 32-bit unsigned integers (matching Yjs/lib0 behavior) so they
+// remain within JavaScript's safe-integer range for cross-runtime interop.
 func NewDoc() *Doc {
-	var b [8]byte
+	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		// Fallback: use a non-zero constant if crypto/rand fails.
-		b = [8]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x00, 0x01}
+		// Fallback: non-zero constant if crypto/rand fails.
+		b = [4]byte{0xca, 0xfe, 0x01, 0x02}
 	}
-	id := binary.LittleEndian.Uint64(b[:])
+	id := uint64(binary.LittleEndian.Uint32(b[:]))
 	if id == 0 {
 		id = 1
 	}
