@@ -1,9 +1,0 @@
-{
-  "name": "yjs-extract",
-  "version": "1.0.0",
-  "type": "module",
-  "dependencies": {
-    "yjs": "*",
-    "y-protocols": "*"
-  }
-}

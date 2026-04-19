@@ -24,3 +24,7 @@ go.work.sum
 
 # Test results
 testresults/
+
+# Node modules (test vector generation only)
+testdata/_node/
+testdata/node_modules/
