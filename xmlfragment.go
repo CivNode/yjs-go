@@ -1,8 +1,10 @@
 package yjs
 
-// XmlFragment is a basic skeleton for XML node storage.
-// It stores child items in a doubly-linked list, same as Array.
-// Full XML manipulation (attributes, element nesting) is deferred to a future version.
+// XmlFragment represents a shared XML tree rooted in the document.
+//
+// In v0.1.x, XmlFragment is a PLACEHOLDER: only Len() is implemented.
+// Mutations (child insertion, attribute setting, iteration) are planned
+// for v0.2. For current work use Text, Map, or Array.
 type XmlFragment struct {
 	doc   *Doc
 	name  string

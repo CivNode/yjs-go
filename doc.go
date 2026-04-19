@@ -115,6 +115,11 @@ func (d *Doc) GetArray(name string) *Array {
 }
 
 // GetXmlFragment returns the named XmlFragment type, creating it if it does not exist.
+// GetXmlFragment returns a shared XmlFragment rooted at the given name.
+//
+// In v0.1.x the returned fragment supports only Len(); see the XmlFragment
+// godoc. Use GetText, GetMap, or GetArray for functional shared types
+// until XmlFragment mutation lands in v0.2.
 func (d *Doc) GetXmlFragment(name string) *XmlFragment {
 	d.mu.Lock()
 	defer d.mu.Unlock()
