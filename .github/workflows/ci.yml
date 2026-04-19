@@ -50,6 +50,6 @@ jobs:
         env:
           YJS_GO_INTEROP: "1"
         run: |
-          cd testdata/interop
-          chmod +x test.sh
-          ./test.sh
+          cd testdata/interop && chmod +x setup.sh && ./setup.sh
+          cd ../..
+          go test ./transport/... -run TestInterop -v
