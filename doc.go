@@ -9,6 +9,12 @@ import (
 // UpdateHandler is called whenever the local document produces a new update.
 type UpdateHandler func(update []byte, origin interface{})
 
+// indexedHandler pairs a handler with its registration ID so it can be removed.
+type indexedHandler struct {
+	id uint64
+	fn UpdateHandler
+}
+
 // Doc is the root Yjs document. It owns a StructStore, manages transactions,
 // and holds named shared types (Text, Map, Array, XmlFragment).
 type Doc struct {
@@ -23,8 +29,12 @@ type Doc struct {
 	// are immediately marked deleted rather than reintegrated as live.
 	ds *deleteSet
 
-	// observers
-	updateHandlers []UpdateHandler
+	// updateHandlers is the indexed set of registered update handlers.
+	// Each entry pairs a handler with an ID used by the unsubscribe closure.
+	updateHandlers []indexedHandler
+
+	// nextHandlerID is a monotonically increasing counter for handler IDs.
+	nextHandlerID uint64
 
 	// current transaction (nil when idle)
 	currentTx *transaction
@@ -118,10 +128,27 @@ func (d *Doc) GetXmlFragment(name string) *XmlFragment {
 
 // OnUpdate registers a handler that is called after each transaction with the
 // binary v1 update bytes that should be broadcast to peers.
-func (d *Doc) OnUpdate(h UpdateHandler) {
+//
+// It returns an unsubscribe function. Call it to remove the handler; subsequent
+// transactions will not invoke it. This prevents handler leaks across
+// connect/disconnect cycles when the same Doc is reused.
+func (d *Doc) OnUpdate(h UpdateHandler) func() {
 	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.updateHandlers = append(d.updateHandlers, h)
+	id := d.nextHandlerID
+	d.nextHandlerID++
+	d.updateHandlers = append(d.updateHandlers, indexedHandler{id: id, fn: h})
+	d.mu.Unlock()
+
+	return func() {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		for i, entry := range d.updateHandlers {
+			if entry.id == id {
+				d.updateHandlers = append(d.updateHandlers[:i], d.updateHandlers[i+1:]...)
+				return
+			}
+		}
+	}
 }
 
 // Transact runs fn inside a transaction. All structural changes must happen
@@ -154,11 +181,11 @@ func (d *Doc) Transact(fn func(), origin interface{}) {
 	// Encode the transaction as a v1 update and fire handlers.
 	update := encodeUpdateV1(pending, pendingDs)
 	d.mu.Lock()
-	handlers := make([]UpdateHandler, len(d.updateHandlers))
-	copy(handlers, d.updateHandlers)
+	snapshot := make([]indexedHandler, len(d.updateHandlers))
+	copy(snapshot, d.updateHandlers)
 	d.mu.Unlock()
-	for _, h := range handlers {
-		h(update, origin)
+	for _, entry := range snapshot {
+		entry.fn(update, origin)
 	}
 
 	// Fire type-level observers.

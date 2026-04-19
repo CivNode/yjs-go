@@ -1,6 +1,7 @@
 package yjs_test
 
 import (
+	"sync/atomic"
 	"testing"
 
 	yjs "github.com/CivNode/yjs-go"
@@ -104,5 +105,59 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	got := dstArr.ToSlice()
 	if len(got) != 3 || got[0] != "go" || got[1] != "crdt" || got[2] != "yjs" {
 		t.Errorf("Array after restore: got %v", got)
+	}
+}
+
+// TestOnUpdateUnsubscribe verifies that the unsubscribe function returned by
+// OnUpdate prevents the handler from being called after deregistration.
+func TestOnUpdateUnsubscribe(t *testing.T) {
+	doc := yjs.NewDocWithClientID(1)
+	text := doc.GetText("x")
+
+	var calls atomic.Int32
+	unsub := doc.OnUpdate(func(_ []byte, _ interface{}) {
+		calls.Add(1)
+	})
+
+	// First transaction — handler must fire.
+	doc.Transact(func() { text.Insert(0, "a") }, nil)
+	if calls.Load() != 1 {
+		t.Fatalf("expected 1 call before unsub, got %d", calls.Load())
+	}
+
+	// Unsubscribe.
+	unsub()
+
+	// Second transaction — handler must NOT fire.
+	doc.Transact(func() { text.Insert(1, "b") }, nil)
+	if calls.Load() != 1 {
+		t.Fatalf("expected still 1 call after unsub, got %d", calls.Load())
+	}
+}
+
+// TestOnUpdateMultipleHandlers verifies that multiple handlers can be registered
+// and independently unsubscribed without affecting one another.
+func TestOnUpdateMultipleHandlers(t *testing.T) {
+	doc := yjs.NewDocWithClientID(2)
+	text := doc.GetText("y")
+
+	var callsA, callsB atomic.Int32
+	unsubA := doc.OnUpdate(func(_ []byte, _ interface{}) { callsA.Add(1) })
+	_ = doc.OnUpdate(func(_ []byte, _ interface{}) { callsB.Add(1) })
+
+	doc.Transact(func() { text.Insert(0, "hello") }, nil)
+	if callsA.Load() != 1 || callsB.Load() != 1 {
+		t.Fatalf("expected both handlers called once; A=%d B=%d", callsA.Load(), callsB.Load())
+	}
+
+	// Remove A only.
+	unsubA()
+
+	doc.Transact(func() { text.Insert(5, "!") }, nil)
+	if callsA.Load() != 1 {
+		t.Errorf("handler A should not fire after unsub, got %d calls", callsA.Load())
+	}
+	if callsB.Load() != 2 {
+		t.Errorf("handler B should still fire, got %d calls", callsB.Load())
 	}
 }

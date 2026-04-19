@@ -14,6 +14,7 @@ package transport
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 
@@ -27,14 +28,23 @@ import (
 type UpdateHandler func(update []byte)
 
 // ClientConn is a WebSocket connection to a y-websocket relay.
+//
+// The ctx field is intentionally absent: Go style requires contexts to be
+// passed explicitly to each operation rather than stored in structs.
+// dialCtx/dialCancel own the connection lifetime; writeMsg/readMsg each
+// receive a ctx parameter.
 type ClientConn struct {
-	doc      *yjs.Doc
-	conn     *websocket.Conn
-	handlers []UpdateHandler
-	mu       sync.Mutex
-	ctx      context.Context
-	cancel   context.CancelFunc
-	done     chan struct{}
+	doc        *yjs.Doc
+	conn       *websocket.Conn
+	handlers   []UpdateHandler
+	mu         sync.Mutex
+	dialCtx    context.Context
+	dialCancel context.CancelFunc
+	done       chan struct{}
+	// unsubscribeDoc removes the doc-level OnUpdate handler registered by
+	// Connect. It is called by Close to prevent handler accumulation across
+	// reconnects.
+	unsubscribeDoc func()
 }
 
 // Connect dials url, joins roomName, and performs the sync handshake.
@@ -56,27 +66,31 @@ func Connect(ctx context.Context, doc *yjs.Doc, url, roomName, token string) (*C
 	}
 
 	c := &ClientConn{
-		doc:    doc,
-		conn:   conn,
-		ctx:    dialCtx,
-		cancel: dialCancel,
-		done:   make(chan struct{}),
+		doc:        doc,
+		conn:       conn,
+		dialCtx:    dialCtx,
+		dialCancel: dialCancel,
+		done:       make(chan struct{}),
 	}
 
-	// Register to send local updates to the relay.
-	doc.OnUpdate(func(update []byte, origin interface{}) {
+	// Perform initial sync handshake before registering the local-update
+	// forwarder. If the handshake fails, no handler is ever registered, so
+	// the doc is not left with a dead handler pointing at a closed conn.
+	if err := c.syncHandshake(dialCtx); err != nil {
+		dialCancel()
+		_ = conn.Close(websocket.StatusInternalError, "handshake failed")
+		return nil, fmt.Errorf("sync handshake: %w", err)
+	}
+
+	// Register to send local updates to the relay now that the connection is
+	// confirmed live. Store the unsubscribe function so Close can deregister
+	// the handler and prevent accumulation across reconnect cycles.
+	c.unsubscribeDoc = doc.OnUpdate(func(update []byte, origin interface{}) {
 		if origin == "remote" {
 			return
 		}
 		_ = c.sendUpdate(update)
 	})
-
-	// Perform initial sync handshake.
-	if err := c.syncHandshake(); err != nil {
-		dialCancel()
-		_ = conn.Close(websocket.StatusInternalError, "handshake failed")
-		return nil, fmt.Errorf("sync handshake: %w", err)
-	}
 
 	// Start receive loop.
 	go c.receiveLoop()
@@ -88,18 +102,18 @@ func Connect(ctx context.Context, doc *yjs.Doc, url, roomName, token string) (*C
 //  1. Send our step1 (state vector).
 //  2. Wait for server's step1, reply with step2 (what server is missing).
 //  3. Wait for server's step2, apply it.
-func (c *ClientConn) syncHandshake() error {
+func (c *ClientConn) syncHandshake(ctx context.Context) error {
 	// Send our step1.
 	sv, err := yjs.EncodeStateVector(c.doc)
 	if err != nil {
 		return fmt.Errorf("encode state vector: %w", err)
 	}
-	if err := c.writeMsg(protocol.EncodeSyncStep1(sv)); err != nil {
+	if err := c.writeMsg(ctx, protocol.EncodeSyncStep1(sv)); err != nil {
 		return fmt.Errorf("send step1: %w", err)
 	}
 
 	// Read server's step1.
-	msgType, payload, err := c.readMsg()
+	msgType, payload, err := c.readMsg(ctx)
 	if err != nil {
 		return fmt.Errorf("read server step1: %w", err)
 	}
@@ -112,12 +126,12 @@ func (c *ClientConn) syncHandshake() error {
 	if err != nil {
 		return fmt.Errorf("encode state-as-update: %w", err)
 	}
-	if err := c.writeMsg(protocol.EncodeSyncStep2(update)); err != nil {
+	if err := c.writeMsg(ctx, protocol.EncodeSyncStep2(update)); err != nil {
 		return fmt.Errorf("send step2: %w", err)
 	}
 
 	// Read server's step2.
-	msgType, payload, err = c.readMsg()
+	msgType, payload, err = c.readMsg(ctx)
 	if err != nil {
 		return fmt.Errorf("read server step2: %w", err)
 	}
@@ -137,7 +151,7 @@ func (c *ClientConn) syncHandshake() error {
 func (c *ClientConn) receiveLoop() {
 	defer close(c.done)
 	for {
-		msgType, payload, err := c.readMsg()
+		msgType, payload, err := c.readMsg(c.dialCtx)
 		if err != nil {
 			return
 		}
@@ -159,7 +173,7 @@ func (c *ClientConn) receiveLoop() {
 			if err != nil {
 				continue
 			}
-			_ = c.writeMsg(protocol.EncodeSyncStep2(update))
+			_ = c.writeMsg(c.dialCtx, protocol.EncodeSyncStep2(update))
 		}
 	}
 }
@@ -170,7 +184,7 @@ func (c *ClientConn) Send(update []byte) error {
 }
 
 func (c *ClientConn) sendUpdate(update []byte) error {
-	return c.writeMsg(protocol.EncodeUpdate(update))
+	return c.writeMsg(c.dialCtx, protocol.EncodeUpdate(update))
 }
 
 // OnUpdate registers a handler called for every remote update received.
@@ -180,22 +194,25 @@ func (c *ClientConn) OnUpdate(h UpdateHandler) {
 	c.handlers = append(c.handlers, h)
 }
 
-// Close gracefully closes the connection.
+// Close gracefully closes the connection and deregisters the doc-level handler.
 func (c *ClientConn) Close() error {
-	c.cancel()
+	if c.unsubscribeDoc != nil {
+		c.unsubscribeDoc()
+	}
+	c.dialCancel()
 	err := c.conn.Close(websocket.StatusNormalClosure, "client close")
 	<-c.done
 	return err
 }
 
 // writeMsg sends a binary WebSocket message.
-func (c *ClientConn) writeMsg(data []byte) error {
-	return c.conn.Write(c.ctx, websocket.MessageBinary, data)
+func (c *ClientConn) writeMsg(ctx context.Context, data []byte) error {
+	return c.conn.Write(ctx, websocket.MessageBinary, data)
 }
 
 // readMsg reads one binary WebSocket message and parses the y-protocols header.
-func (c *ClientConn) readMsg() (uint64, []byte, error) {
-	_, data, err := c.conn.Read(c.ctx)
+func (c *ClientConn) readMsg(ctx context.Context) (uint64, []byte, error) {
+	_, data, err := c.conn.Read(ctx)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -224,7 +241,7 @@ func newByteReader(data []byte) *byteReader { return &byteReader{data: data} }
 
 func (b *byteReader) Read(p []byte) (int, error) {
 	if b.pos >= len(b.data) {
-		return 0, fmt.Errorf("EOF")
+		return 0, io.EOF
 	}
 	n := copy(p, b.data[b.pos:])
 	b.pos += n
