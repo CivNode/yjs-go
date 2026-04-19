@@ -308,13 +308,27 @@ func readItemContent(r io.Reader, item *EncodedItem) (uint64, error) {
 		}
 		item.ContentData = s
 		return uint64(utf16Len(s)), nil
-	case 8: // ContentAny
-		v, err := ReadAny(r)
+	case 8: // ContentAny — an array of any-values; length is written first.
+		count, err := ReadVarUint(r)
 		if err != nil {
 			return 0, err
 		}
-		item.ContentData = v
-		return 1, nil
+		arr := make([]interface{}, count)
+		for i := uint64(0); i < count; i++ {
+			v, err := ReadAny(r)
+			if err != nil {
+				return 0, fmt.Errorf("any[%d]: %w", i, err)
+			}
+			arr[i] = v
+		}
+		// Expose as a slice of length count; or as the single value when count==1
+		// for ease of use by callers (the common case for Map.set).
+		if count == 1 {
+			item.ContentData = arr[0]
+		} else {
+			item.ContentData = arr
+		}
+		return count, nil
 	case 3: // ContentBinary
 		b, err := ReadVarBytes(r)
 		if err != nil {
@@ -708,7 +722,23 @@ func writeItemContent(w io.Writer, item *EncodedItem) error {
 		return WriteVarUint(w, item.Length)
 	case 4:
 		return WriteVarString(w, item.ContentData.(string))
-	case 8:
+	case 8: // ContentAny: varuint(count) + count*any
+		// If ContentData is already a slice, write each element.
+		if arr, ok := item.ContentData.([]interface{}); ok {
+			if err := WriteVarUint(w, uint64(len(arr))); err != nil {
+				return err
+			}
+			for _, v := range arr {
+				if err := WriteAny(w, v); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		// Single value (the common case from Map.set).
+		if err := WriteVarUint(w, 1); err != nil {
+			return err
+		}
 		return WriteAny(w, item.ContentData)
 	case 3:
 		return WriteVarBytes(w, item.ContentData.([]byte))
