@@ -17,16 +17,16 @@ func TestEncodeDecodeUpdateWithOrigins(t *testing.T) {
 	u := &protocol.UpdateV1{
 		Items: []*protocol.EncodedItem{
 			{
-				ClientID:    1,
-				Clock:       2,
-				Length:      3,
-				InfoByte:    infoByte,
-				OriginLeft:  olID,
-				OriginRight: orID,
-				ContentRef:  4,
-				ContentData: "abc",
+				ClientID:     1,
+				Clock:        2,
+				Length:       3,
+				InfoByte:     infoByte,
+				OriginLeft:   olID,
+				OriginRight:  orID,
+				ContentRef:   4,
+				ContentData:  "abc",
 				ParentIsYKey: true,
-				ParentYKey:  "text",
+				ParentYKey:   "text",
 			},
 		},
 		DeleteSet: make(map[uint64][]protocol.EncodedDeleteRange),
@@ -183,11 +183,11 @@ func TestEncodeDecodeGCItem(t *testing.T) {
 	u := &protocol.UpdateV1{
 		Items: []*protocol.EncodedItem{
 			{
-				ClientID:  1,
-				Clock:     0,
-				Length:    3,
-				InfoByte:  0,
-				IsGC:      true,
+				ClientID:   1,
+				Clock:      0,
+				Length:     3,
+				InfoByte:   0,
+				IsGC:       true,
 				ContentRef: 0,
 			},
 		},
@@ -214,11 +214,11 @@ func TestEncodeDecodeSkipItem(t *testing.T) {
 	u := &protocol.UpdateV1{
 		Items: []*protocol.EncodedItem{
 			{
-				ClientID:  5,
-				Clock:     0,
-				Length:    10,
-				InfoByte:  0x0a, // skip = contentRef 10
-				IsSkip:    true,
+				ClientID:   5,
+				Clock:      0,
+				Length:     10,
+				InfoByte:   0x0a, // skip = contentRef 10
+				IsSkip:     true,
 				ContentRef: 10,
 			},
 		},

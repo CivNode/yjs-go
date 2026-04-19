@@ -55,8 +55,8 @@ func TestDecodeContentEmbed2(t *testing.T) {
 // TestDecodeContentFormat tests format content (contentRef=6) via raw binary.
 func TestDecodeContentFormat(t *testing.T) {
 	var content bytes.Buffer
-	protocol.WriteVarString(&content, "bold")           // key
-	writeAnyBool(&content, true)                       // value = true (any tag 120)
+	protocol.WriteVarString(&content, "bold") // key
+	writeAnyBool(&content, true)              // value = true (any tag 120)
 	data := buildMinimalItem(6, "root", content.Bytes())
 
 	decoded, err := protocol.DecodeUpdateV1(data)
@@ -101,7 +101,7 @@ func TestDecodeContentJSONLegacy(t *testing.T) {
 func TestDecodeContentDoc(t *testing.T) {
 	var content bytes.Buffer
 	protocol.WriteVarString(&content, "my-guid") // guid
-	writeAnyNull(&content)                        // opts = null
+	writeAnyNull(&content)                       // opts = null
 	data := buildMinimalItem(9, "root", content.Bytes())
 
 	decoded, err := protocol.DecodeUpdateV1(data)

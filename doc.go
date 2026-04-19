@@ -223,11 +223,11 @@ type SharedType interface {
 
 // transaction accumulates changes within a Transact call.
 type transaction struct {
-	doc           *Doc
-	origin        interface{}
-	pendingItems  []*Item
+	doc            *Doc
+	origin         interface{}
+	pendingItems   []*Item
 	pendingDeletes []*Item
-	changedTypes  map[SharedType]struct{}
+	changedTypes   map[SharedType]struct{}
 }
 
 func (tx *transaction) addItem(item *Item) {

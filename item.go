@@ -4,13 +4,13 @@ package yjs
 type contentKind uint8
 
 const (
-	contentString  contentKind = 4  // ContentString ref in Yjs
-	contentAny     contentKind = 8  // ContentAny
-	contentType    contentKind = 7  // ContentType (nested type)
-	contentDeleted contentKind = 1  // ContentDeleted (GC'd)
-	contentBinary  contentKind = 3  // ContentBinary
-	contentEmbed   contentKind = 5  // ContentEmbed
-	contentFormat  contentKind = 6  // ContentFormat
+	contentString  contentKind = 4 // ContentString ref in Yjs
+	contentAny     contentKind = 8 // ContentAny
+	contentType    contentKind = 7 // ContentType (nested type)
+	contentDeleted contentKind = 1 // ContentDeleted (GC'd)
+	contentBinary  contentKind = 3 // ContentBinary
+	contentEmbed   contentKind = 5 // ContentEmbed
+	contentFormat  contentKind = 6 // ContentFormat
 )
 
 // Item is a node in the doubly-linked list that forms a Yjs type's content.

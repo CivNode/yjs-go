@@ -18,9 +18,9 @@ type TextDelta struct {
 // Text is a CRDT text sequence. Internally it is a doubly-linked list of Items,
 // each holding a string fragment.
 type Text struct {
-	doc      *Doc
-	name     string
-	start    *Item // first item in the list (possibly deleted)
+	doc       *Doc
+	name      string
+	start     *Item // first item in the list (possibly deleted)
 	observers []func(*TextEvent)
 }
 
@@ -304,4 +304,3 @@ func (t *Text) splitItemAt(item *Item, offset uint64) (*Item, *Item) {
 
 	return item, rightItem
 }
-

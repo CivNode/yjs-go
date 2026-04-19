@@ -1,7 +1,8 @@
 // Package transport provides a WebSocket client for the y-websocket relay protocol.
 //
 // Wire framing: each WebSocket binary message is one y-protocols sync message:
-//   varuint(msgType), varBytes(payload)
+//
+//	varuint(msgType), varBytes(payload)
 //
 // The client performs a sync handshake on connect:
 //  1. Receives step1 from server (server's state vector)
