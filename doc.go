@@ -18,6 +18,11 @@ type Doc struct {
 	store    *StructStore
 	share    map[string]SharedType // named types
 
+	// ds accumulates all delete ranges ever applied to this document.
+	// integrateItem consults it so that items arriving after their delete
+	// are immediately marked deleted rather than reintegrated as live.
+	ds *deleteSet
+
 	// observers
 	updateHandlers []UpdateHandler
 
@@ -43,6 +48,7 @@ func NewDoc() *Doc {
 		clientID: id,
 		store:    newStructStore(),
 		share:    make(map[string]SharedType),
+		ds:       newDeleteSet(),
 	}
 }
 
@@ -55,6 +61,7 @@ func NewDocWithClientID(clientID uint64) *Doc {
 		clientID: clientID,
 		store:    newStructStore(),
 		share:    make(map[string]SharedType),
+		ds:       newDeleteSet(),
 	}
 }
 
@@ -168,6 +175,15 @@ func ApplyUpdate(d *Doc, update []byte, origin interface{}) error {
 	d.mu.Lock()
 	tx := &transaction{doc: d, origin: origin}
 	d.currentTx = tx
+	// Accumulate incoming delete ranges into the document-level delete set
+	// before integrating items. This ensures that integrateItem can consult
+	// d.ds and immediately mark items deleted if their ID is already covered
+	// by a delete range that arrived out of order.
+	for clientID, ranges := range ds.clients {
+		for _, r := range ranges {
+			d.ds.add(clientID, r.clock, r.len)
+		}
+	}
 	d.mu.Unlock()
 
 	// Integrate items.
@@ -177,10 +193,14 @@ func ApplyUpdate(d *Doc, update []byte, origin interface{}) error {
 		d.mu.Unlock()
 	}
 
-	// Apply delete set.
-	// For each delete range, split items at the range boundaries if necessary,
-	// then mark all items fully covered by the range as deleted.
-	for clientID, ranges := range ds.clients {
+	// Apply the full accumulated delete set. Using d.ds (not just the current
+	// update's ds) ensures that delete ranges which arrived before the items
+	// they reference are applied once those items are integrated.
+	// applyDeleteRange is idempotent: already-deleted items are skipped.
+	d.mu.Lock()
+	fullDS := d.ds
+	d.mu.Unlock()
+	for clientID, ranges := range fullDS.clients {
 		for _, r := range ranges {
 			d.mu.Lock()
 			applyDeleteRange(d, tx, clientID, r.clock, r.len)
