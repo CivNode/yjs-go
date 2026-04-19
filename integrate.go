@@ -11,6 +11,14 @@ func integrateItem(d *Doc, item *Item) {
 
 	d.store.addItem(item)
 
+	// Consult the document's accumulated delete set. If the item's starting ID
+	// is already deleted, mark it now. Partial coverage (where only some chars
+	// of a multi-char item are deleted) is handled by applyDeleteRange after
+	// all items are integrated.
+	if d.ds.isDeleted(item.ID) {
+		item.Deleted = true
+	}
+
 	// Resolve parent name to a SharedType if not already set.
 	if item.Parent == nil && item.parentName != "" {
 		st, ok := d.share[item.parentName]
