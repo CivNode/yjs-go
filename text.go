@@ -102,12 +102,8 @@ func (t *Text) Delete(index, length uint64) {
 	doc.mu.Lock()
 	defer doc.mu.Unlock()
 
-	// First, split at index so the deletion starts at an item boundary.
-	if index > 0 {
-		_, startItem := t.findPositionAt(index)
-		_ = startItem
-	}
-	// Now walk and delete items from index to index+length.
+	// Walk and delete items from index to index+length.
+	// Items that straddle either boundary are split in-place by splitItemAt.
 	var pos uint64
 	remaining := length
 	for item := t.start; item != nil && remaining > 0; item = item.Right {
