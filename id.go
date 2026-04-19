@@ -1,7 +1,8 @@
 // Package yjs implements the Yjs CRDT protocol in Go.
-// It provides Doc, Text, Map, Array, and XmlFragment types with full binary
-// protocol support (update-v1, update-v2, sync, awareness) compatible with
-// the JavaScript yjs library and y-websocket relay.
+// It provides Doc, Text, Map, Array, and XmlFragment types with binary
+// protocol support (update-v1, sync, awareness) compatible with the
+// JavaScript yjs library and y-websocket relay.
+// update-v2 is not yet implemented; update-v1 is the only supported format for v0.1.x.
 package yjs
 
 import "fmt"
