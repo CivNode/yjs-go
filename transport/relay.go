@@ -29,9 +29,10 @@ func newRoom() *Room { return &Room{doc: yjs.NewDoc()} }
 
 // relayClient represents one WebSocket connection in a room.
 type relayClient struct {
-	room *Room
-	conn *websocket.Conn
-	ctx  context.Context
+	room   *Room
+	conn   *websocket.Conn
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func (rc *relayClient) send(data []byte) {
@@ -39,13 +40,51 @@ func (rc *relayClient) send(data []byte) {
 }
 
 // Relay is an http.Handler serving multiple rooms.
+//
+// Pass a cancellable context to NewRelayWithContext; cancelling it closes all
+// open WebSocket connections promptly. This is required in tests because
+// nhooyr.io/websocket hijacks the HTTP connection, making httptest.Server's
+// Close/CloseClientConnections unable to reach WS connections.
 type Relay struct {
 	mu    sync.Mutex
 	rooms map[string]*Room
+
+	// shutdownCtx, when cancelled, causes all active per-connection contexts
+	// to be cancelled, unblocking their read loops and driving conn.Done().
+	shutdownCtx context.Context
+	shutdown    context.CancelFunc
 }
 
-// NewRelay creates a new in-process relay.
-func NewRelay() *Relay { return &Relay{rooms: make(map[string]*Room)} }
+// NewRelay creates a new in-process relay with context.Background() as its
+// shutdown context. Use NewRelayWithContext when you need to close all open
+// WebSocket connections on demand (e.g. simulating a relay server restart in tests).
+func NewRelay() *Relay {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Relay{
+		rooms:       make(map[string]*Room),
+		shutdownCtx: ctx,
+		shutdown:    cancel,
+	}
+}
+
+// NewRelayWithContext creates a new in-process relay whose active connections
+// are torn down when ctx is cancelled. This is the preferred constructor for
+// tests that need to simulate a relay server restart.
+func NewRelayWithContext(ctx context.Context) *Relay {
+	shutdownCtx, cancel := context.WithCancel(ctx)
+	return &Relay{
+		rooms:       make(map[string]*Room),
+		shutdownCtx: shutdownCtx,
+		shutdown:    cancel,
+	}
+}
+
+// Shutdown cancels all open WebSocket connections managed by this relay.
+// After Shutdown returns, in-flight reads on connected clients will fail and
+// their conn.Done() channels will be closed.
+func (relay *Relay) Shutdown() {
+	relay.shutdown()
+}
 
 func (relay *Relay) getOrCreateRoom(roomName string) *Room {
 	relay.mu.Lock()
@@ -72,8 +111,11 @@ func (relay *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	ctx := r.Context()
-	rc := &relayClient{room: room, conn: conn, ctx: ctx}
+	// Derive per-connection context from the relay's shutdown context.
+	// Cancelling relay.shutdownCtx (via Shutdown()) tears down all connections.
+	ctx, cancel := context.WithCancel(relay.shutdownCtx)
+	rc := &relayClient{room: room, conn: conn, ctx: ctx, cancel: cancel}
+	defer cancel()
 
 	// Send our step1 immediately so the client can reply with step2.
 	room.mu.Lock()
