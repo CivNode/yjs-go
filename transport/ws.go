@@ -194,6 +194,14 @@ func (c *ClientConn) OnUpdate(h UpdateHandler) {
 	c.handlers = append(c.handlers, h)
 }
 
+// Done returns a channel that is closed when the connection's receive loop
+// exits. This happens when the relay closes the WebSocket (organic drop) or
+// when Close is called. Callers can select on Done to detect organic relay
+// disconnections without polling via Send.
+func (c *ClientConn) Done() <-chan struct{} {
+	return c.done
+}
+
 // Close gracefully closes the connection and deregisters the doc-level handler.
 func (c *ClientConn) Close() error {
 	if c.unsubscribeDoc != nil {
