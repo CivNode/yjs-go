@@ -1,5 +1,5 @@
 module github.com/CivNode/yjs-go
 
-go 1.26.1
+go 1.22
 
-require nhooyr.io/websocket v1.8.17 // indirect
+require nhooyr.io/websocket v1.8.17
