@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sort"
 )
 
 // Update-v1 binary layout (matches Yjs lib0/encoding exactly):
@@ -101,13 +102,7 @@ func EncodeStateVectorV1(sv map[uint64]uint64) ([]byte, error) {
 		pairs = append(pairs, kv{k, v})
 	}
 	// Sort descending by clientID (matches Yjs).
-	for i := 0; i < len(pairs)-1; i++ {
-		for j := i + 1; j < len(pairs); j++ {
-			if pairs[j].k > pairs[i].k {
-				pairs[i], pairs[j] = pairs[j], pairs[i]
-			}
-		}
-	}
+	sort.Slice(pairs, func(i, j int) bool { return pairs[i].k > pairs[j].k })
 	for _, p := range pairs {
 		if err := WriteVarUint(&buf, p.k); err != nil {
 			return nil, err
@@ -587,13 +582,7 @@ func writeUpdateV1(w io.Writer, u *UpdateV1) error {
 		groups = append(groups, g)
 	}
 	// Sort descending by clientID.
-	for i := 0; i < len(groups)-1; i++ {
-		for j := i + 1; j < len(groups); j++ {
-			if groups[j].clientID > groups[i].clientID {
-				groups[i], groups[j] = groups[j], groups[i]
-			}
-		}
-	}
+	sort.Slice(groups, func(i, j int) bool { return groups[i].clientID > groups[j].clientID })
 
 	if err := WriteVarUint(w, uint64(len(groups))); err != nil {
 		return err
@@ -628,13 +617,7 @@ func writeUpdateV1(w io.Writer, u *UpdateV1) error {
 	for cid, ranges := range u.DeleteSet {
 		dsEntries = append(dsEntries, dsEntry{cid, ranges})
 	}
-	for i := 0; i < len(dsEntries)-1; i++ {
-		for j := i + 1; j < len(dsEntries); j++ {
-			if dsEntries[j].clientID > dsEntries[i].clientID {
-				dsEntries[i], dsEntries[j] = dsEntries[j], dsEntries[i]
-			}
-		}
-	}
+	sort.Slice(dsEntries, func(i, j int) bool { return dsEntries[i].clientID > dsEntries[j].clientID })
 	if err := WriteVarUint(w, uint64(len(dsEntries))); err != nil {
 		return err
 	}
