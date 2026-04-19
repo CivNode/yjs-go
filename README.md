@@ -6,13 +6,22 @@ Yjs is a conflict-free replicated data type (CRDT) framework. Two peers can edit
 
 **Status: alpha.** The API is usable and the binary format is wire-compatible with the official Yjs implementation. Breaking changes are possible before v1.0.
 
+## Current limitations
+
+The following features are absent or incomplete in v0.1.x:
+
+- **update-v2 not implemented.** `update-v1` is the only encode/decode format. All interop tests run against the v1 wire format, which is what `y-websocket` uses by default.
+- **`XmlFragment` has only `Len()`.** No child insertion, no attribute support, no mutations. Do not use `XmlFragment` for XML-tree scenarios; that surface will be fleshed out in a future release.
+- **Content types 2 (JSON legacy) and 9 (ContentDoc, nested docs) are decode-only stubs.** They are not produced by any of the primary CRDT types (Text/Map/Array) and are only present for wire-format completeness.
+- **`Text.Delete` straddle guard is dead code.** A defensive branch inside `Delete` (for items that straddle the deletion start) is never reached in practice because `findPositionAt` pre-splits items at the target boundary. It is left in place for safety but not covered by tests. This is the remaining coverage gap after v0.1.1.
+
 ## Install
 
 ```
 go get github.com/CivNode/yjs-go
 ```
 
-Requires Go 1.21 or later. The only non-stdlib dependency is `nhooyr.io/websocket` for the transport package.
+Requires Go 1.22 or later. The only non-stdlib dependency is `nhooyr.io/websocket` for the transport package.
 
 ## Quick start
 
@@ -167,18 +176,27 @@ msg, err := protocol.ReadSyncMessage(r)
 sv, _  := yjs.EncodeStateVector(doc)             // compact state vector
 upd, _ := yjs.EncodeStateAsUpdate(doc, remoteSV) // diff since remoteSV
 yjs.ApplyUpdate(doc, upd, "remote")               // integrate an update
+
+// Snapshot the full document state and restore it on a new Doc.
+snap, _ := doc.Snapshot()
+doc2, _ := yjs.RestoreDoc(snap)
 ```
 
 ## Benchmarks
 
-On an AMD Ryzen 9 3950X (amd64, Go 1.26):
+On an AMD Ryzen 9 3950X (amd64, Go 1.22):
 
 ```
-BenchmarkTextInsert1k      1893    1.27 ms/op    456 KB/op   10070 allocs/op
-BenchmarkTextAppend1k      1245    2.97 ms/op   1002 KB/op   25017 allocs/op
-BenchmarkMapUpdate1k       1599    1.55 ms/op   1153 KB/op   30529 allocs/op
-BenchmarkApplyUpdate       5955     405 µs/op    363 KB/op   11048 allocs/op
-BenchmarkEncodeStateVector 9116619  263 ns/op      160 B/op      5 allocs/op
+BenchmarkTextInsert1k           870    1.29 ms/op    456 KB/op   10070 allocs/op
+BenchmarkTextInsert10k            9  113.6 ms/op    4908 KB/op  100101 allocs/op
+BenchmarkTextInsert100k           1  14.35 s/op    54896 KB/op 1000189 allocs/op
+BenchmarkTextAppend1k           416    2.87 ms/op   1002 KB/op   25017 allocs/op
+BenchmarkMapUpdate1k            798    1.50 ms/op   1153 KB/op   30529 allocs/op
+BenchmarkSnapshotSize/100     25305   47.36 µs/op     46 KB/op    1057 allocs/op
+BenchmarkSnapshotSize/1000      931    1.38 ms/op    446 KB/op   10073 allocs/op
+BenchmarkSnapshotSize/10000       9  116.4 ms/op    4907 KB/op  100104 allocs/op
+BenchmarkApplyUpdate           2845  421.4 µs/op     354 KB/op   11048 allocs/op
+BenchmarkEncodeStateVector  4612528  259.6 ns/op      160 B/op       5 allocs/op
 ```
 
 Run them yourself:
