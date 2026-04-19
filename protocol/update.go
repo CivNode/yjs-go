@@ -742,6 +742,20 @@ func writeItemContent(w io.Writer, item *EncodedItem) error {
 		return WriteAny(w, item.ContentData)
 	case 3:
 		return WriteVarBytes(w, item.ContentData.([]byte))
+	case 5: // ContentEmbed — JSON string
+		if s, ok := item.ContentData.(string); ok {
+			return WriteVarString(w, s)
+		}
+		return WriteVarString(w, "null")
+	case 6: // ContentFormat — key + any value
+		if m, ok := item.ContentData.(map[string]interface{}); ok {
+			key, _ := m["key"].(string)
+			if err := WriteVarString(w, key); err != nil {
+				return err
+			}
+			return WriteAny(w, m["value"])
+		}
+		return fmt.Errorf("ContentFormat: expected map[string]interface{}")
 	case 7:
 		return WriteVarUint(w, item.ContentData.(uint64))
 	default:

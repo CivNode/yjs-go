@@ -178,17 +178,13 @@ func ApplyUpdate(d *Doc, update []byte, origin interface{}) error {
 	}
 
 	// Apply delete set.
+	// For each delete range, split items at the range boundaries if necessary,
+	// then mark all items fully covered by the range as deleted.
 	for clientID, ranges := range ds.clients {
 		for _, r := range ranges {
-			for clock := r.clock; clock < r.clock+r.len; clock++ {
-				d.mu.Lock()
-				it := d.store.getItem(ID{clientID, clock})
-				if it != nil && !it.Deleted {
-					it.Deleted = true
-					tx.addDeletedItem(it)
-				}
-				d.mu.Unlock()
-			}
+			d.mu.Lock()
+			applyDeleteRange(d, tx, clientID, r.clock, r.len)
+			d.mu.Unlock()
 		}
 	}
 

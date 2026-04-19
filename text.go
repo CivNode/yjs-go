@@ -305,23 +305,3 @@ func (t *Text) splitItemAt(item *Item, offset uint64) (*Item, *Item) {
 	return item, rightItem
 }
 
-// findItemAtIndex returns the last visible item whose cumulative end index <= index,
-// or nil if index is 0 (insert at start). Used by Delete.
-func (t *Text) findItemAtIndex(index uint64) *Item {
-	if index == 0 {
-		return nil
-	}
-	var pos uint64
-	var last *Item
-	for item := t.start; item != nil; item = item.Right {
-		if item.Deleted {
-			continue
-		}
-		pos += item.Length
-		last = item
-		if pos >= index {
-			return last
-		}
-	}
-	return last
-}
